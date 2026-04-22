@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Broadcast Timer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <main class="timers">
+      <section class="timer-card">
+        <input class="timer-title" type="text" placeholder="תיאור קאונטר" />
+
+        <div class="timer-display" id="display1">00:00:00</div>
+
+        <div class="control-row control-row-top">
+          <button id="up1">UP</button>
+          <button id="down1">DN</button>
+          <div class="time-inputs">
+            <input id="hours1" maxlength="2" value="00" />
+            <span>:</span>
+            <input id="minutes1" maxlength="2" value="00" />
+            <span>:</span>
+            <input id="seconds1" maxlength="2" value="00" />
+          </div>
+          <button id="set1">SET</button>
+        </div>
+
+        <div class="control-row control-row-bottom">
+          <button id="start1">START</button>
+          <button id="reset1">RESET</button>
+        </div>
+
+        <div class="timer-progress">
+          <div class="timer-progress-fill" id="progressFill1"></div>
+        </div>
+      </section>
+
+      <section class="timer-card">
+        <input class="timer-title" type="text" placeholder="תיאור קאונטר" />
+
+        <div class="timer-display" id="display2">00:00:00</div>
+
+        <div class="control-row control-row-top">
+          <button id="up2">UP</button>
+          <button id="down2">DN</button>
+          <div class="time-inputs">
+            <input id="hours2" maxlength="2" value="00" />
+            <span>:</span>
+            <input id="minutes2" maxlength="2" value="00" />
+            <span>:</span>
+            <input id="seconds2" maxlength="2" value="00" />
+          </div>
+          <button id="set2">SET</button>
+        </div>
+
+        <div class="control-row control-row-bottom">
+          <button id="start2">START</button>
+          <button id="reset2">RESET</button>
+        </div>
+
+        <div class="timer-progress">
+          <div class="timer-progress-fill" id="progressFill2"></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-left">
+        <img src="logo.png" alt="logo" class="logo" onerror="this.style.display='none'">
+        <div class="footer-credits">
+          <div class="footer-credit-line">אפיון: שי בכר | פיתוח: ארז נעים</div>
+          <div class="footer-credit-line">כל הזכויות שמורות 2026</div>
+        </div>
+      </div>
+
+      <div class="footer-center">
+        <div class="system-clock" id="systemClock">00:00:00</div>
+      </div>
+
+      <div class="footer-right">
+        <div id="layoutToggle" class="layout-toggle" role="group" aria-label="Layout toggle">
+          <button type="button" class="layout-option" data-layout="single" aria-pressed="false">שעון 1</button>
+          <button type="button" class="layout-option" data-layout="double" aria-pressed="true">2 שעונים</button>
+        </div>
+        <div class="system-clock-controls">
+          <div class="system-clock-inputs">
+            <input id="sysHours" maxlength="2" value="00" aria-label="System clock hours" />
+            <span>:</span>
+            <input id="sysMinutes" maxlength="2" value="00" aria-label="System clock minutes" />
+            <span>:</span>
+            <input id="sysSeconds" maxlength="2" value="00" aria-label="System clock seconds" />
+          </div>
+          <button id="systemClockSetBtn" class="system-clock-set-btn" type="button">SET</button>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

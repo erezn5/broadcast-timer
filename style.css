@@ -1,0 +1,566 @@
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  --display-size: clamp(132px, min(17.2vw, 36vh), 520px);
+  --clock-size: clamp(70px, min(8.5vw, 19vh), 150px);
+  --control-gap: clamp(8px, 0.8vw, 12px);
+  --control-button-width: clamp(72px, 7vw, 112px);
+  --set-button-width: min(calc(var(--control-button-width) * 2.25), 26cqw);
+  --button-height: clamp(52px, 4.5vw, 64px);
+  --button-font: clamp(18px, 1.7vw, 22px);
+  --time-input-width: clamp(56px, 5.4vw, 118px);
+  --time-input-height: clamp(56px, 4.9vw, 84px);
+  --time-input-font: clamp(34px, 3.2vw, 52px);
+  --time-separator-font: clamp(30px, 2.8vw, 46px);
+}
+
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  background: #05070d;
+  color: white;
+}
+
+body {
+  overflow: auto;
+}
+
+.app {
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: 18px;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 14px;
+}
+
+.timers {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.app.single-layout {
+  --display-size: clamp(156px, min(22vw, 42vh), 680px);
+}
+
+.app.single-layout .timers {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: stretch;
+}
+
+.app.single-layout .timer-card {
+  width: 100%;
+  max-width: none;
+}
+
+.app.single-layout .timer-card:nth-child(2) {
+  display: none;
+}
+
+.timer-card {
+  background: #161c27;
+  border-radius: 28px;
+  padding: 16px;
+  display: grid;
+  grid-template-areas:
+    "title"
+    "display"
+    "top"
+    "bottom"
+    "progress";
+  grid-template-rows: auto minmax(236px, 1fr) auto auto auto;
+  gap: 12px;
+  transition: opacity 0.2s ease, filter 0.2s ease;
+  container-type: inline-size;
+}
+
+.timer-card.inactive {
+  opacity: 0.48;
+  filter: grayscale(1);
+}
+
+.timer-title {
+  grid-area: title;
+  width: 100%;
+  height: clamp(72px, 8vh, 92px);
+  border: none;
+  border-radius: 16px;
+  padding: 0 20px;
+  font-family: "Heebo", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  font-size: clamp(32px, 4.2vw, 48px);
+  font-weight: 900;
+  line-height: 1;
+  text-align: right;
+  background: rgba(255,255,255,0.08);
+  color: white;
+}
+
+.timer-display {
+  grid-area: display;
+  text-align: center;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  font-size: var(--display-size);
+  line-height: 1;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  color: #9ea5b4;
+  margin: 0;
+}
+
+@supports (font-size: 1cqw) {
+  .timer-display {
+    font-size: min(var(--display-size), 21.2cqw);
+  }
+
+  .app.single-layout .timer-display {
+    font-size: min(var(--display-size), 20.8cqw);
+  }
+}
+
+.timer-card.mode-up .timer-display {
+  color: #00ff00;
+}
+
+.timer-card.mode-down .timer-display {
+  color: #ff0000;
+}
+
+.time-inputs {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--control-gap);
+  direction: ltr;
+  min-width: 0;
+}
+
+.time-inputs input {
+  width: min(var(--time-input-width), 10.8cqw);
+  height: var(--time-input-height);
+  text-align: center;
+  font-size: var(--time-input-font);
+  border-radius: 18px;
+  border: 1px solid transparent;
+  background: rgba(255,255,255,0.08);
+  color: white;
+  transition: background-color 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+
+.time-inputs input:focus {
+  outline: none;
+  background: rgba(80, 116, 154, 0.92);
+  color: #cfe6ff;
+  border: 1px solid rgba(161, 206, 255, 0.96);
+  box-shadow:
+    0 0 0 2px rgba(80, 140, 255, 0.4),
+    0 0 16px rgba(80, 140, 255, 0.45),
+    inset 0 0 14px rgba(200, 228, 255, 0.2);
+  animation: selected-shimmer 1.8s ease-in-out infinite;
+}
+
+.time-inputs input::selection {
+  background: rgba(212, 236, 255, 0.24);
+  color: #e9f5ff;
+}
+
+.time-inputs input::-moz-selection {
+  background: rgba(212, 236, 255, 0.24);
+  color: #e9f5ff;
+}
+
+.time-inputs span {
+  font-size: var(--time-separator-font);
+  font-weight: bold;
+  color: #98a0b2;
+}
+
+.control-row {
+  display: grid;
+  gap: var(--control-gap);
+}
+
+.control-row-top {
+  grid-area: top;
+  grid-template-columns: var(--control-button-width) var(--control-button-width) minmax(0, 1fr) minmax(var(--control-button-width), var(--set-button-width));
+  align-items: center;
+  direction: ltr;
+}
+
+.control-row-bottom {
+  grid-area: bottom;
+  grid-template-columns: 1fr 1fr;
+  direction: ltr;
+}
+
+.control-row-bottom button {
+  width: 100%;
+}
+
+.control-row-top .time-inputs {
+  justify-content: center;
+}
+
+.control-row-top button {
+  width: 100%;
+}
+
+button {
+  min-width: 0;
+  height: var(--button-height);
+  border: none;
+  border-radius: 999px;
+  font-size: var(--button-font);
+  font-weight: 800;
+  cursor: pointer;
+  background: #008acd;
+  color: #07131c;
+}
+button.mode-active {
+  background: #ffffff;
+  color: #111722;
+  border: 1px solid rgba(130, 185, 255, 0.95);
+  box-shadow:
+    0 0 0 2px rgba(80, 140, 255, 0.4),
+    0 0 14px rgba(80, 140, 255, 0.45);
+  animation: selected-shimmer 1.8s ease-in-out infinite;
+}
+
+button.mode-up {
+  background: #ffffff;
+  color: #111722;
+}
+
+@keyframes selected-shimmer {
+  0% {
+    box-shadow:
+      0 0 0 2px rgba(80, 140, 255, 0.35),
+      0 0 12px rgba(80, 140, 255, 0.35),
+      inset 0 0 8px rgba(185, 220, 255, 0.12);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px rgba(130, 185, 255, 0.7),
+      0 0 24px rgba(130, 185, 255, 0.7),
+      inset 0 0 14px rgba(205, 232, 255, 0.3);
+  }
+  100% {
+    box-shadow:
+      0 0 0 2px rgba(80, 140, 255, 0.35),
+      0 0 12px rgba(80, 140, 255, 0.35),
+      inset 0 0 8px rgba(185, 220, 255, 0.12);
+  }
+}
+
+.timer-progress {
+  grid-area: progress;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.12);
+  overflow: hidden;
+}
+
+.timer-progress-fill {
+  width: 0%;
+  height: 100%;
+  border-radius: inherit;
+  background: #ff0000;
+  transition: background-color 0.2s ease;
+}
+
+
+.footer {
+  background: #131923;
+  border-radius: 28px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr) minmax(0, 1fr);
+  align-items: stretch;
+  gap: clamp(12px, 1.2vw, 20px);
+  min-height: clamp(188px, 21vh, 270px);
+  padding: clamp(10px, 1.1vw, 16px) clamp(16px, 1.4vw, 24px);
+  direction: ltr;
+  overflow: hidden;
+}
+
+.footer-left,
+.footer-center,
+.footer-right {
+  min-width: 0;
+  display: flex;
+}
+
+.footer-left {
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: clamp(6px, 0.8vw, 12px);
+}
+
+.footer-center {
+  justify-content: center;
+  align-items: center;
+  container-type: inline-size;
+}
+
+.footer-right {
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-end;
+  gap: clamp(10px, 1vw, 16px);
+  width: 100%;
+}
+
+.system-clock {
+  position: static;
+  transform: none;
+  font-size: var(--clock-size);
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  line-height: 0.9;
+  color: white;
+  white-space: nowrap;
+  text-align: center;
+}
+
+@supports (font-size: 1cqw) {
+  .system-clock {
+    font-size: min(var(--clock-size), 29cqw);
+  }
+}
+
+.logo {
+  position: static;
+  height: clamp(132px, 15.5vh, 220px);
+  max-height: min(100%, 220px);
+  max-width: min(34vw, 520px);
+  width: auto;
+  object-fit: contain;
+  transform: none;
+}
+
+.layout-toggle {
+  position: static;
+  display: inline-grid;
+  grid-auto-flow: column;
+  gap: 6px;
+  padding: 5px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 138, 205, 0.7);
+  background: rgba(0, 138, 205, 0.2);
+  direction: ltr;
+  align-self: flex-end;
+}
+
+.layout-option {
+  min-width: clamp(98px, 8vw, 132px);
+  height: clamp(38px, 3vw, 46px);
+  padding: 0 14px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: #dff5ff;
+  font-family: "Heebo", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  font-size: clamp(20px, 1.3vw, 24px);
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+  direction: rtl;
+  unicode-bidi: isolate;
+  text-align: center;
+}
+
+.layout-option.is-active {
+  background: #008acd;
+  color: #07131c;
+  box-shadow: 0 0 0 1px rgba(0, 138, 205, 0.4);
+}
+
+.system-clock-controls {
+  position: static;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  direction: ltr;
+  justify-content: flex-end;
+  align-self: flex-end;
+  flex-wrap: wrap;
+  max-width: 100%;
+}
+
+.system-clock-inputs {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.system-clock-inputs input {
+  width: clamp(44px, 4vw, 62px);
+  height: clamp(40px, 3.6vw, 54px);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #e8f5ff;
+  text-align: center;
+  font-family: "Heebo", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  font-size: clamp(22px, 1.55vw, 30px);
+  font-weight: 800;
+}
+
+.system-clock-inputs input:focus {
+  outline: none;
+  border-color: rgba(161, 206, 255, 0.96);
+  box-shadow: 0 0 0 2px rgba(80, 140, 255, 0.34);
+}
+
+.system-clock-inputs span {
+  font-size: clamp(24px, 1.8vw, 34px);
+  font-weight: 800;
+  color: #a8b1c2;
+  line-height: 1;
+}
+
+.system-clock-set-btn {
+  min-width: clamp(90px, 7vw, 128px);
+  height: clamp(40px, 3.6vw, 54px);
+  padding: 0 14px;
+  font-family: "Heebo", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  font-size: clamp(18px, 1.2vw, 24px);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.footer-credits {
+  position: static;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: right;
+  direction: rtl;
+  max-width: 100%;
+}
+
+.footer-credit-line {
+  font-size: clamp(14px, 1.25vw, 20px);
+  font-weight: 700;
+  line-height: 1.2;
+  color: rgba(255, 255, 255, 0.9);
+  white-space: nowrap;
+}
+
+@media (max-width: 1400px), (max-height: 900px) {
+  .app {
+    padding: 12px;
+    gap: 10px;
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .timers {
+    gap: 8px;
+  }
+
+  .timer-card {
+    padding: 12px;
+    gap: 10px;
+    grid-template-rows: auto minmax(188px, 1fr) auto auto auto;
+  }
+}
+
+@media (max-width: 1100px) {
+  .timers {
+    grid-template-columns: 1fr;
+  }
+
+  .app {
+    grid-template-rows: 1fr auto;
+  }
+
+  .footer {
+    min-height: auto;
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "center"
+      "right"
+      "left";
+    padding: 12px;
+    gap: 10px;
+  }
+
+  .footer-center {
+    grid-area: center;
+  }
+
+  .footer-right {
+    grid-area: right;
+    align-items: flex-end;
+    gap: 8px;
+  }
+
+  .footer-left {
+    grid-area: left;
+    align-items: flex-start;
+    gap: 6px;
+  }
+
+  .footer-credits {
+    align-items: flex-start;
+  }
+
+  .footer-credit-line {
+    font-size: clamp(12px, 2.2vw, 15px);
+    white-space: normal;
+  }
+
+  .layout-toggle {
+    gap: 4px;
+    padding: 4px;
+  }
+
+  .layout-option {
+    min-width: clamp(78px, 18vw, 112px);
+    height: clamp(34px, 7vw, 42px);
+    padding: 0 10px;
+    font-size: clamp(14px, 3.3vw, 18px);
+  }
+
+  .system-clock-controls {
+    gap: 6px;
+    align-self: flex-end;
+  }
+
+  .logo {
+    height: clamp(96px, 17vw, 140px);
+    max-width: min(56vw, 320px);
+  }
+
+  .system-clock-inputs {
+    gap: 5px;
+  }
+
+  .system-clock-inputs input {
+    width: clamp(38px, 9vw, 52px);
+    height: clamp(36px, 8vw, 48px);
+    font-size: clamp(18px, 4.2vw, 24px);
+  }
+
+  .system-clock-inputs span {
+    font-size: clamp(20px, 4.5vw, 28px);
+  }
+
+  .system-clock-set-btn {
+    min-width: clamp(72px, 17vw, 100px);
+    height: clamp(36px, 8vw, 48px);
+    font-size: clamp(14px, 3.5vw, 19px);
+    padding: 0 10px;
+  }
+}
