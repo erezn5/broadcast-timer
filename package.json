@@ -26,6 +26,7 @@
     "electron": "^41.2.1"
   },
   "dependencies": {
-    "electron-squirrel-startup": "^1.0.1"
+    "electron-squirrel-startup": "^1.0.1",
+    "react-doctor": "^0.1.2"
   }
 }
