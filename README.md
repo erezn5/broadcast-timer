@@ -1,6 +1,6 @@
 # Broadcast Timer (Electron)
 
-Dual broadcast counters with UP/DN modes, large on-screen display, and a manual-adjustable system clock footer.
+Dual broadcast counters with UP/DN modes, large on-screen display, and a system clock footer that supports local/manual time or NTP sync.
 
 ## Features
 
@@ -9,7 +9,10 @@ Dual broadcast counters with UP/DN modes, large on-screen display, and a manual-
 - `SET`, `START/PAUSE`, `RESET`
 - Keyboard-friendly time input (`HH:MM:SS`, numeric only, auto-advance, Enter triggers `SET`)
 - Progress bar per timer
-- Footer system clock (local machine time + optional manual offset via `SET`)
+- Footer system clock (local machine time by default)
+- Manual system clock offset via `SET` (when NTP is not configured)
+- Optional NTP server sync from a popup modal (`⚙`) with periodic re-sync
+- `⚙` indicator when NTP mode is active
 - Layout toggle: single timer / two timers
 - Electron packaging for macOS, Windows, and Linux
 - Icon generation pipeline from `.ico` source
@@ -88,6 +91,13 @@ out/make
 4. Press `START` (button changes to `PAUSE` while running)
 5. Press `RESET` to return to the configured value in the input fields
 
+## System Clock Sync
+
+1. Click `⚙` in the footer to open the NTP popup.
+2. Select an NTP host from the dropdown (or pick `Custom...`), then click `שמור`.
+3. Use `סנכרן` for an immediate sync check.
+4. To return to local/manual mode, clear the NTP field and click `שמור`.
+
 ## Main Files
 
 - `index.html` – UI structure
@@ -96,3 +106,44 @@ out/make
 - `main.js` / `preload.js` – Electron main/preload wiring
 - `forge.config.js` – build and maker config
 - `scripts/generate-icons.js` – icon conversion pipeline
+
+## Open Source Setup (Safe Main Branch)
+
+To keep the project open for community improvements without allowing direct overwrites of `main`, use this flow:
+
+1. Make the repository public on GitHub.
+2. Let contributors work through forks + Pull Requests.
+3. Protect `main` with branch rules.
+
+### Recommended Branch Protection (GitHub)
+
+In GitHub:
+
+`Repository -> Settings -> Branches -> Add branch protection rule`
+
+Use pattern:
+
+`main`
+
+Enable:
+
+- Require a pull request before merging
+- Require approvals (at least 1)
+- Dismiss stale approvals when new commits are pushed
+- Require conversation resolution before merging
+- Require status checks to pass before merging (if you add CI)
+- Restrict who can push to matching branches (only maintainers)
+- Do not allow force pushes
+- Do not allow deletions
+
+### Contribution Flow
+
+1. Fork the repo
+2. Create a feature branch
+3. Open a Pull Request to `main`
+4. Review + merge via PR only
+
+## License
+
+This project is licensed under the ISC License.
+See [LICENSE](./LICENSE).

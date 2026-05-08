@@ -10,7 +10,408 @@ function formatTime(totalSeconds) {
   return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
 }
 
+const clockBridge = window.clockBridge || null;
+const NTP_SYNC_INTERVAL_MS = 60_000;
+const NTP_CUSTOM_OPTION_VALUE = "__custom__";
+
 let systemClockOffsetMs = 0;
+let ntpServerAddress = "";
+let ntpOffsetMs = null;
+let ntpSyncIntervalId = null;
+let ntpSyncInFlight = false;
+let ntpStatusElement = null;
+let systemClockControlRefs = null;
+let clockSettingsToggleButton = null;
+let clockSettingsPanelElement = null;
+let clockSettingsAutoCloseTimerId = null;
+let setClockSettingsPanelOpen = null;
+
+function isNtpConfigured() {
+  return ntpServerAddress.length > 0;
+}
+
+function scheduleClockSettingsAutoClose(delayMs = 1400) {
+  if (typeof setClockSettingsPanelOpen !== "function") {
+    return;
+  }
+
+  if (clockSettingsAutoCloseTimerId !== null) {
+    clearTimeout(clockSettingsAutoCloseTimerId);
+  }
+
+  clockSettingsAutoCloseTimerId = setTimeout(() => {
+    setClockSettingsPanelOpen(false);
+    clockSettingsAutoCloseTimerId = null;
+  }, delayMs);
+}
+
+function syncClockSettingsIndicator() {
+  if (!clockSettingsToggleButton) {
+    return;
+  }
+
+  const active = isNtpConfigured();
+  clockSettingsToggleButton.classList.toggle("ntp-active", active);
+  clockSettingsToggleButton.setAttribute(
+    "aria-label",
+    active ? "הגדרות סנכרון שעון (NTP פעיל)" : "הגדרות סנכרון שעון"
+  );
+}
+
+function triggerButtonClickFeedback(button) {
+  if (!button) {
+    return;
+  }
+
+  button.classList.remove("is-clicked");
+  void button.offsetWidth;
+  button.classList.add("is-clicked");
+
+  window.setTimeout(() => {
+    button.classList.remove("is-clicked");
+  }, 140);
+}
+
+function normalizeNtpServer(value) {
+  return String(value || "").trim();
+}
+
+function getEffectiveClockDate() {
+  const offsetMs = ntpOffsetMs !== null ? ntpOffsetMs : systemClockOffsetMs;
+  return new Date(Date.now() + offsetMs);
+}
+
+function setNtpStatus(message, tone = "info") {
+  if (!ntpStatusElement) {
+    return;
+  }
+
+  ntpStatusElement.textContent = message;
+  ntpStatusElement.classList.remove("is-ok", "is-error");
+
+  if (tone === "ok") {
+    ntpStatusElement.classList.add("is-ok");
+  } else if (tone === "error") {
+    ntpStatusElement.classList.add("is-error");
+  }
+}
+
+function updateManualClockControlsState() {
+  if (!systemClockControlRefs) {
+    return;
+  }
+
+  const disableManualControls = isNtpConfigured();
+
+  systemClockControlRefs.fields.forEach((field) => {
+    field.disabled = disableManualControls;
+  });
+
+  systemClockControlRefs.setButton.disabled = disableManualControls;
+
+  if (disableManualControls) {
+    updateSystemClockInputs();
+  }
+}
+
+function stopNtpSyncLoop() {
+  if (ntpSyncIntervalId !== null) {
+    clearInterval(ntpSyncIntervalId);
+    ntpSyncIntervalId = null;
+  }
+  ntpSyncInFlight = false;
+  ntpOffsetMs = null;
+}
+
+async function syncNtpOnce(triggeredManually = false) {
+  if (!isNtpConfigured()) {
+    return;
+  }
+
+  if (!clockBridge || typeof clockBridge.queryNtpTime !== "function") {
+    ntpOffsetMs = null;
+    setNtpStatus("NTP לא זמין בבילד הזה. שימוש בשעון מחשב/ידני.", "error");
+    return;
+  }
+
+  if (ntpSyncInFlight) {
+    return;
+  }
+
+  ntpSyncInFlight = true;
+  const requestedServer = ntpServerAddress;
+
+  if (triggeredManually) {
+    setNtpStatus(`מסנכרן מול ${requestedServer}...`);
+  }
+
+  try {
+    const result = await clockBridge.queryNtpTime(requestedServer);
+
+    if (requestedServer !== ntpServerAddress || !isNtpConfigured()) {
+      return;
+    }
+
+    const nextOffsetMs = Number.isFinite(result && result.offsetMs)
+      ? result.offsetMs
+      : null;
+
+    ntpOffsetMs = nextOffsetMs;
+
+    if (nextOffsetMs === null) {
+      throw new Error("Invalid NTP response.");
+    }
+
+    updateSystemClock();
+    updateSystemClockInputs();
+
+    const hostLabel = result && result.host ? result.host : requestedServer;
+    const roundTripSuffix = Number.isFinite(result && result.roundTripMs)
+      ? ` | RTT ${Math.round(result.roundTripMs)}ms`
+      : "";
+
+    setNtpStatus(`NTP פעיל: ${hostLabel}${roundTripSuffix}`, "ok");
+    if (triggeredManually && isNtpConfigured() && clockSettingsPanelElement && !clockSettingsPanelElement.hidden) {
+      scheduleClockSettingsAutoClose();
+    }
+  } catch (error) {
+    if (requestedServer !== ntpServerAddress || !isNtpConfigured()) {
+      return;
+    }
+
+    ntpOffsetMs = null;
+    updateSystemClock();
+    updateSystemClockInputs();
+
+    const reason = error && error.message ? error.message : "NTP request failed";
+    setNtpStatus(`NTP לא זמין כרגע (${reason}). שימוש בשעון מחשב/ידני.`, "error");
+  } finally {
+    ntpSyncInFlight = false;
+  }
+}
+
+function startNtpSyncLoop() {
+  if (!isNtpConfigured()) {
+    stopNtpSyncLoop();
+    return;
+  }
+
+  if (ntpSyncIntervalId !== null) {
+    clearInterval(ntpSyncIntervalId);
+  }
+
+  ntpOffsetMs = null;
+  void syncNtpOnce(false);
+
+  ntpSyncIntervalId = setInterval(() => {
+    void syncNtpOnce(false);
+  }, NTP_SYNC_INTERVAL_MS);
+}
+
+async function setupClockSettings() {
+  const toggleButton = document.getElementById("clockSettingsToggleBtn");
+  const panel = document.getElementById("clockSettingsPanel");
+  const closeButton = document.getElementById("clockSettingsCloseBtn");
+  const ntpSelect = document.getElementById("ntpServerSelect");
+  const ntpCustomInput = document.getElementById("ntpServerCustomInput");
+  const saveButton = document.getElementById("ntpServerSaveBtn");
+  const syncNowButton = document.getElementById("ntpSyncNowBtn");
+  ntpStatusElement = document.getElementById("ntpStatus");
+
+  if (
+    !toggleButton ||
+    !panel ||
+    !closeButton ||
+    !ntpSelect ||
+    !ntpCustomInput ||
+    !saveButton ||
+    !syncNowButton ||
+    !ntpStatusElement
+  ) {
+    return;
+  }
+
+  clockSettingsToggleButton = toggleButton;
+  clockSettingsPanelElement = panel;
+
+  const hasOptionValue = (value) => {
+    const normalized = normalizeNtpServer(value);
+    return Array.from(ntpSelect.options).some((option) => option.value === normalized);
+  };
+
+  const setCustomInputVisibility = (showCustomInput) => {
+    ntpCustomInput.hidden = !showCustomInput;
+    if (!showCustomInput) {
+      ntpCustomInput.value = "";
+    }
+  };
+
+  const readServerFromControls = () => {
+    const selectedValue = normalizeNtpServer(ntpSelect.value);
+    if (selectedValue === NTP_CUSTOM_OPTION_VALUE) {
+      return normalizeNtpServer(ntpCustomInput.value);
+    }
+    return selectedValue;
+  };
+
+  const applyServerToControls = (serverValue) => {
+    const normalized = normalizeNtpServer(serverValue);
+
+    if (!normalized || hasOptionValue(normalized)) {
+      ntpSelect.value = normalized;
+      setCustomInputVisibility(false);
+      return;
+    }
+
+    ntpSelect.value = NTP_CUSTOM_OPTION_VALUE;
+    ntpCustomInput.value = normalized;
+    setCustomInputVisibility(true);
+  };
+
+  setClockSettingsPanelOpen = (isOpen) => {
+    if (clockSettingsAutoCloseTimerId !== null) {
+      clearTimeout(clockSettingsAutoCloseTimerId);
+      clockSettingsAutoCloseTimerId = null;
+    }
+
+    panel.hidden = !isOpen;
+    toggleButton.setAttribute("aria-expanded", isOpen ? "true" : "false");
+
+    if (isOpen) {
+      if (ntpSelect.value === NTP_CUSTOM_OPTION_VALUE) {
+        ntpCustomInput.focus();
+        ntpCustomInput.select();
+      } else {
+        ntpSelect.focus();
+      }
+    }
+  };
+
+  toggleButton.addEventListener("click", () => {
+    const isOpen = toggleButton.getAttribute("aria-expanded") === "true";
+    const willOpen = !isOpen;
+    setClockSettingsPanelOpen(willOpen);
+
+    if (willOpen && isNtpConfigured()) {
+      setNtpStatus(`מסנכרן מול ${ntpServerAddress}...`);
+      void syncNtpOnce(true);
+    }
+  });
+
+  closeButton.addEventListener("click", () => {
+    setClockSettingsPanelOpen(false);
+  });
+
+  panel.addEventListener("click", (event) => {
+    if (event.target === panel) {
+      setClockSettingsPanelOpen(false);
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !panel.hidden) {
+      setClockSettingsPanelOpen(false);
+    }
+  });
+
+  ntpSelect.addEventListener("change", () => {
+    const isCustomSelection = ntpSelect.value === NTP_CUSTOM_OPTION_VALUE;
+    setCustomInputVisibility(isCustomSelection);
+    if (isCustomSelection) {
+      ntpCustomInput.focus();
+      ntpCustomInput.select();
+    }
+  });
+
+  ntpSelect.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      saveButton.click();
+    }
+  });
+
+  ntpCustomInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      saveButton.click();
+    }
+  });
+
+  saveButton.addEventListener("click", async () => {
+    triggerButtonClickFeedback(saveButton);
+    const nextServer = readServerFromControls();
+
+    if (ntpSelect.value === NTP_CUSTOM_OPTION_VALUE && !nextServer) {
+      setNtpStatus("Enter a custom NTP host or choose a server from the list.", "error");
+      ntpCustomInput.focus();
+      return;
+    }
+
+    try {
+      const savedSettings = clockBridge && typeof clockBridge.saveClockSettings === "function"
+        ? await clockBridge.saveClockSettings({ ntpServer: nextServer })
+        : { ntpServer: nextServer };
+
+      ntpServerAddress = normalizeNtpServer(savedSettings && savedSettings.ntpServer);
+      syncClockSettingsIndicator();
+      applyServerToControls(ntpServerAddress);
+      updateManualClockControlsState();
+
+      if (isNtpConfigured()) {
+        setNtpStatus(`שרת NTP נשמר (${ntpServerAddress}).`);
+        startNtpSyncLoop();
+        void syncNtpOnce(true);
+      } else {
+        stopNtpSyncLoop();
+        setNtpStatus("לא הוגדר שרת NTP. השעון מסונכרן לשעון המחשב.");
+        updateSystemClock();
+        updateSystemClockInputs();
+        setClockSettingsPanelOpen(false);
+      }
+    } catch (error) {
+      const reason = error && error.message ? error.message : "Save failed";
+      setNtpStatus(`שמירת שרת NTP נכשלה (${reason}).`, "error");
+    }
+  });
+
+  syncNowButton.addEventListener("click", () => {
+    triggerButtonClickFeedback(syncNowButton);
+    if (!isNtpConfigured()) {
+      setNtpStatus("Select an NTP server and save first.", "error");
+      return;
+    }
+    void syncNtpOnce(true);
+  });
+
+  let initialSettings = { ntpServer: "" };
+
+  if (clockBridge && typeof clockBridge.loadClockSettings === "function") {
+    try {
+      initialSettings = await clockBridge.loadClockSettings();
+    } catch (error) {
+      const reason = error && error.message ? error.message : "Load failed";
+      setNtpStatus(`טעינת הגדרות NTP נכשלה (${reason}).`, "error");
+    }
+  } else {
+    setNtpStatus("NTP לא זמין. שימוש בשעון מחשב/ידני.", "error");
+  }
+
+  ntpServerAddress = normalizeNtpServer(initialSettings && initialSettings.ntpServer);
+  syncClockSettingsIndicator();
+  applyServerToControls(ntpServerAddress);
+  updateManualClockControlsState();
+
+  if (isNtpConfigured()) {
+    setNtpStatus(`שרת פעיל: ${ntpServerAddress}.`);
+    startNtpSyncLoop();
+  } else {
+    setNtpStatus("לא הוגדר שרת NTP. השעון מסונכרן לשעון המחשב.");
+    stopNtpSyncLoop();
+    updateSystemClock();
+  }
+
+  setClockSettingsPanelOpen(false);
+}
 
 function setupTimeFieldBehavior() {
   const groups = document.querySelectorAll(".time-inputs");
@@ -109,6 +510,10 @@ function setupSystemClockControls() {
   }
 
   const fields = [hoursInput, minutesInput, secondsInput];
+  systemClockControlRefs = {
+    fields,
+    setButton
+  };
   const maxValues = [23, 59, 59];
   const allowedKeys = new Set([
     "Backspace",
@@ -127,6 +532,11 @@ function setupSystemClockControls() {
   };
 
   const applyManualClockFromInputs = () => {
+    if (isNtpConfigured()) {
+      setNtpStatus("NTP פעיל. כדי לעבור להזנה ידנית, נקה את כתובת השרת ולחץ שמור.", "error");
+      return;
+    }
+
     fields.forEach((input, index) => {
       normalizeField(input, maxValues[index]);
     });
@@ -204,6 +614,7 @@ function setupSystemClockControls() {
 
   setButton.addEventListener("click", applyManualClockFromInputs);
 
+  updateManualClockControlsState();
   updateSystemClockInputs();
 }
 
@@ -476,13 +887,13 @@ class Timer {
 }
 
 function updateSystemClock() {
-  const now = new Date(Date.now() + systemClockOffsetMs);
+  const now = getEffectiveClockDate();
   const time = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
   document.getElementById("systemClock").textContent = time;
 }
 
 function updateSystemClockInputs() {
-  const now = new Date(Date.now() + systemClockOffsetMs);
+  const now = getEffectiveClockDate();
   const hoursInput = document.getElementById("sysHours");
   const minutesInput = document.getElementById("sysMinutes");
   const secondsInput = document.getElementById("sysSeconds");
@@ -535,9 +946,15 @@ function initRenderer() {
   setupTimeFieldBehavior();
   setupSystemClockControls();
   setupLayoutToggle();
+  void setupClockSettings();
   new Timer(1);
   new Timer(2);
-  setInterval(updateSystemClock, 1000);
+  setInterval(() => {
+    updateSystemClock();
+    if (isNtpConfigured()) {
+      updateSystemClockInputs();
+    }
+  }, 1000);
   updateSystemClock();
 }
 
