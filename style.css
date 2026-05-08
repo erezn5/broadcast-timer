@@ -5,6 +5,7 @@
 :root {
   --display-size: clamp(132px, min(17.2vw, 36vh), 520px);
   --clock-size: clamp(70px, min(8.5vw, 19vh), 150px);
+  --numeric-font: "Heebo", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
   --control-gap: clamp(8px, 0.8vw, 12px);
   --control-button-width: clamp(72px, 7vw, 112px);
   --set-button-width: min(calc(var(--control-button-width) * 2.25), 26cqw);
@@ -108,10 +109,13 @@ body {
   justify-content: center;
   align-items: center;
   width: 100%;
+  font-family: var(--numeric-font);
   font-size: var(--display-size);
   line-height: 1;
   font-weight: 900;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: lining-nums tabular-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+  font-kerning: none;
   white-space: nowrap;
   overflow: hidden;
   color: #9ea5b4;
@@ -218,27 +222,33 @@ body {
 button {
   min-width: 0;
   height: var(--button-height);
-  border: none;
+  border: 1px solid rgba(132, 187, 246, 0.35);
   border-radius: 999px;
   font-size: var(--button-font);
   font-weight: 800;
   cursor: pointer;
-  background: #008acd;
-  color: #07131c;
+  background: #0e3e72;
+  color: #f3f8ff;
+  transition:
+    background-color 0.16s ease,
+    color 0.16s ease,
+    border-color 0.16s ease,
+    opacity 0.16s ease,
+    filter 0.16s ease;
 }
 button.mode-active {
-  background: #ffffff;
-  color: #111722;
+  background: #1d5f9f;
+  color: #ffffff;
   border: 1px solid rgba(130, 185, 255, 0.95);
   box-shadow:
-    0 0 0 2px rgba(80, 140, 255, 0.4),
-    0 0 14px rgba(80, 140, 255, 0.45);
+    0 0 0 2px rgba(80, 140, 255, 0.28),
+    0 0 14px rgba(80, 140, 255, 0.32);
   animation: selected-shimmer 1.8s ease-in-out infinite;
 }
 
 button.mode-up {
-  background: #ffffff;
-  color: #111722;
+  background: #1d5f9f;
+  color: #ffffff;
 }
 
 @keyframes selected-shimmer {
@@ -320,12 +330,40 @@ button.mode-up {
   width: 100%;
 }
 
+@media (hover: hover) and (pointer: fine) {
+  .footer-right button {
+    opacity: 0.5;
+    filter: saturate(0.72);
+  }
+
+  .footer-right .layout-option.is-active {
+    opacity: 0.68;
+  }
+
+  .footer-right:hover button,
+  .footer-right:focus-within button {
+    opacity: 1;
+    filter: none;
+  }
+}
+
+.footer-top-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  width: 100%;
+}
+
 .system-clock {
   position: static;
   transform: none;
+  font-family: var(--numeric-font);
   font-size: var(--clock-size);
   font-weight: 900;
-  font-variant-numeric: tabular-nums;
+  font-variant-numeric: lining-nums tabular-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+  font-kerning: none;
   line-height: 0.9;
   color: white;
   white-space: nowrap;
@@ -340,9 +378,9 @@ button.mode-up {
 
 .logo {
   position: static;
-  height: clamp(132px, 15.5vh, 220px);
-  max-height: min(100%, 220px);
-  max-width: min(34vw, 520px);
+  height: clamp(112px, 13.2vh, 187px);
+  max-height: min(100%, 187px);
+  max-width: min(28.9vw, 442px);
   width: auto;
   object-fit: contain;
   transform: none;
@@ -355,10 +393,244 @@ button.mode-up {
   gap: 6px;
   padding: 5px;
   border-radius: 999px;
-  border: 1px solid rgba(0, 138, 205, 0.7);
-  background: rgba(0, 138, 205, 0.2);
+  border: 1px solid rgba(85, 139, 194, 0.52);
+  background: rgba(22, 48, 79, 0.7);
   direction: ltr;
   align-self: flex-end;
+}
+
+.clock-settings-toggle-btn {
+  min-width: clamp(40px, 3vw, 46px);
+  width: clamp(40px, 3vw, 46px);
+  height: clamp(40px, 3vw, 46px);
+  position: relative;
+  border-radius: 12px;
+  border: 1px solid rgba(132, 187, 246, 0.4);
+  background: rgba(20, 52, 88, 0.9);
+  color: #f3f8ff;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.clock-settings-toggle-btn span {
+  font-size: clamp(20px, 1.4vw, 24px);
+  transform: translateY(-1px);
+}
+
+.clock-settings-toggle-btn[aria-expanded="true"] {
+  background: #1d5f9f;
+  color: #ffffff;
+  border-color: rgba(132, 187, 246, 0.72);
+}
+
+.clock-settings-toggle-btn.ntp-active::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #42ff7e;
+  box-shadow:
+    0 0 0 1px rgba(6, 17, 28, 0.9),
+    0 0 8px rgba(66, 255, 126, 0.8);
+}
+
+.clock-settings-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 8, 14, 0.72);
+  backdrop-filter: blur(2px);
+}
+
+.clock-settings-modal[hidden] {
+  display: none;
+}
+
+.clock-settings-dialog {
+  width: min(92vw, 560px);
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 16px;
+  border: 1px solid rgba(130, 190, 232, 0.42);
+  background: rgba(16, 26, 38, 0.98);
+  box-shadow:
+    0 24px 48px rgba(0, 0, 0, 0.45),
+    0 0 0 1px rgba(124, 190, 238, 0.18) inset;
+  direction: rtl;
+}
+
+.clock-settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.clock-settings-title {
+  margin: 0;
+  font-family: "Heebo", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  font-size: clamp(22px, 1.7vw, 30px);
+  font-weight: 900;
+  line-height: 1.1;
+  color: #eef7ff;
+}
+
+.clock-settings-close-btn {
+  min-width: 34px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(201, 228, 255, 0.44);
+  background: rgba(255, 255, 255, 0.12);
+  color: #eaf6ff;
+  padding: 0;
+  line-height: 1;
+  font-size: 20px;
+  font-weight: 900;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.clock-settings-label {
+  font-family: "Heebo", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  font-size: clamp(16px, 1vw, 20px);
+  font-weight: 800;
+  color: #d6f1ff;
+  line-height: 1.1;
+}
+
+.clock-settings-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  direction: ltr;
+}
+
+.clock-settings-form input,
+.clock-settings-form select {
+  min-width: 0;
+  height: clamp(38px, 3.1vw, 50px);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #e8f5ff;
+  text-align: left;
+  padding: 0 10px;
+  font-family: "Heebo", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  font-size: clamp(15px, 1.1vw, 20px);
+  font-weight: 700;
+}
+
+.clock-settings-form select {
+  appearance: none;
+}
+
+.clock-settings-form input:focus,
+.clock-settings-form select:focus {
+  outline: none;
+  border-color: rgba(161, 206, 255, 0.96);
+  box-shadow: 0 0 0 2px rgba(80, 140, 255, 0.34);
+}
+
+.clock-settings-form select option {
+  background: #1a2430;
+  color: #eef7ff;
+}
+
+.clock-settings-form button {
+  min-width: clamp(72px, 6vw, 108px);
+  height: clamp(38px, 3.1vw, 50px);
+  border: 1px solid rgba(172, 214, 255, 0.38);
+  border-radius: 10px;
+  padding: 0 12px;
+  background: linear-gradient(180deg, #2a77c6 0%, #1d5f9f 100%);
+  color: #ffffff;
+  box-shadow:
+    0 6px 14px rgba(6, 20, 36, 0.42),
+    inset 0 1px 0 rgba(230, 244, 255, 0.25);
+  font-family: "Heebo", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  font-size: clamp(15px, 1.05vw, 20px);
+  font-weight: 900;
+  transition:
+    transform 0.08s ease,
+    filter 0.12s ease,
+    box-shadow 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.clock-settings-form button:hover {
+  filter: brightness(1.08);
+  border-color: rgba(196, 229, 255, 0.62);
+  box-shadow:
+    0 8px 18px rgba(6, 20, 36, 0.46),
+    inset 0 1px 0 rgba(234, 246, 255, 0.28);
+}
+
+.clock-settings-form button:focus-visible {
+  outline: none;
+  border-color: rgba(198, 230, 255, 0.96);
+  box-shadow:
+    0 0 0 2px rgba(80, 140, 255, 0.35),
+    0 8px 18px rgba(6, 20, 36, 0.46);
+}
+
+.clock-settings-form button:active,
+.clock-settings-form button.is-clicked {
+  transform: translateY(1px) scale(0.98);
+  filter: brightness(0.92);
+  box-shadow:
+    0 2px 5px rgba(6, 20, 36, 0.45),
+    inset 0 2px 6px rgba(4, 14, 24, 0.35);
+}
+
+.clock-settings-custom-input {
+  width: 100%;
+  min-width: 0;
+  height: clamp(38px, 3.1vw, 50px);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #e8f5ff;
+  text-align: left;
+  padding: 0 10px;
+  font-family: "Heebo", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  font-size: clamp(15px, 1.1vw, 20px);
+  font-weight: 700;
+}
+
+.clock-settings-custom-input:focus {
+  outline: none;
+  border-color: rgba(161, 206, 255, 0.96);
+  box-shadow: 0 0 0 2px rgba(80, 140, 255, 0.34);
+}
+
+.clock-settings-status {
+  min-height: 1.25em;
+  font-size: clamp(13px, 0.95vw, 17px);
+  font-weight: 700;
+  color: #c7d8ef;
+  text-align: right;
+  line-height: 1.2;
+}
+
+.clock-settings-status.is-ok {
+  color: #86f2af;
+}
+
+.clock-settings-status.is-error {
+  color: #ff8d8d;
 }
 
 .layout-option {
@@ -368,7 +640,7 @@ button.mode-up {
   border-radius: 999px;
   border: none;
   background: transparent;
-  color: #dff5ff;
+  color: #f3f8ff;
   font-family: "Heebo", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
   font-size: clamp(20px, 1.3vw, 24px);
   font-weight: 900;
@@ -380,9 +652,9 @@ button.mode-up {
 }
 
 .layout-option.is-active {
-  background: #008acd;
-  color: #07131c;
-  box-shadow: 0 0 0 1px rgba(0, 138, 205, 0.4);
+  background: #1d5f9f;
+  color: #ffffff;
+  box-shadow: 0 0 0 1px rgba(132, 187, 246, 0.35);
 }
 
 .system-clock-controls {
@@ -437,6 +709,12 @@ button.mode-up {
   font-size: clamp(18px, 1.2vw, 24px);
   font-weight: 900;
   line-height: 1;
+}
+
+.system-clock-inputs input:disabled,
+.system-clock-set-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .footer-credits {
@@ -526,6 +804,45 @@ button.mode-up {
     padding: 4px;
   }
 
+  .footer-top-controls {
+    gap: 6px;
+  }
+
+  .clock-settings-toggle-btn {
+    min-width: 38px;
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+  }
+
+  .clock-settings-dialog {
+    width: min(100%, 520px);
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .clock-settings-title {
+    font-size: clamp(18px, 4.5vw, 24px);
+  }
+
+  .clock-settings-close-btn {
+    min-width: 32px;
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    font-size: 18px;
+  }
+
+  .clock-settings-form {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  .clock-settings-form button {
+    width: 100%;
+    min-width: 0;
+  }
+
   .layout-option {
     min-width: clamp(78px, 18vw, 112px);
     height: clamp(34px, 7vw, 42px);
@@ -539,8 +856,8 @@ button.mode-up {
   }
 
   .logo {
-    height: clamp(96px, 17vw, 140px);
-    max-width: min(56vw, 320px);
+    height: clamp(82px, 14.5vw, 119px);
+    max-width: min(47.5vw, 272px);
   }
 
   .system-clock-inputs {
