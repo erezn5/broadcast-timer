@@ -13,6 +13,7 @@ function formatTime(totalSeconds) {
 let systemClockOffsetMs = 0;
 let timerDisplayFitRafId = null;
 let timerDisplayMeasurer = null;
+let timerDisplayResizeObserver = null;
 
 function getEffectiveClockDate() {
   return new Date(Date.now() + systemClockOffsetMs);
@@ -50,34 +51,32 @@ function fitTimerDisplayToSlot(displayElement) {
   measurer.style.fontFamily = displayStyle.fontFamily;
   measurer.style.fontWeight = displayStyle.fontWeight;
   measurer.style.fontStyle = displayStyle.fontStyle;
-  measurer.style.letterSpacing = displayStyle.letterSpacing;
-  measurer.style.lineHeight = displayStyle.lineHeight;
+  measurer.style.letterSpacing = "-0.015em";
+  measurer.style.lineHeight = "0.94";
   measurer.style.fontVariantNumeric = displayStyle.fontVariantNumeric;
   measurer.style.fontFeatureSettings = displayStyle.fontFeatureSettings;
-  measurer.textContent = "00:00:00";
+  measurer.textContent = "88:88:88";
 
-  const targetWidth = bounds.width * 0.98;
-  const targetHeight = bounds.height * 0.92;
-  let low = 24;
-  let high = Math.max(24, Math.floor(Math.min(bounds.width, bounds.height * 1.45)));
-  let best = low;
+  const targetWidth = bounds.width * 0.985;
+  const targetHeight = bounds.height * 0.93;
+  const probeFontSize = 200;
+  measurer.style.fontSize = `${probeFontSize}px`;
+  const probeBounds = measurer.getBoundingClientRect();
 
-  for (let step = 0; step < 16; step += 1) {
-    const mid = (low + high) / 2;
-    measurer.style.fontSize = `${mid}px`;
-    const measured = measurer.getBoundingClientRect();
-    const fitsWidth = measured.width <= targetWidth;
-    const fitsHeight = measured.height <= targetHeight;
-
-    if (fitsWidth && fitsHeight) {
-      best = mid;
-      low = mid;
-    } else {
-      high = mid;
-    }
+  if (probeBounds.width <= 0 || probeBounds.height <= 0) {
+    return;
   }
 
-  displayElement.style.fontSize = `${Math.floor(best)}px`;
+  const widthRatio = probeBounds.width / probeFontSize;
+  const heightRatio = probeBounds.height / probeFontSize;
+  const fitByWidth = targetWidth / widthRatio;
+  const fitByHeight = targetHeight / heightRatio;
+  const fitSize = Math.floor(Math.min(fitByWidth, fitByHeight));
+  const safeMin = bounds.width > 350 ? 80 : 32;
+  const safeMax = Math.floor(bounds.height * 1.05);
+  const clamped = Math.max(safeMin, Math.min(fitSize, safeMax));
+
+  displayElement.style.fontSize = `${clamped}px`;
 }
 
 function fitAllTimerDisplaysToSlots() {
@@ -95,6 +94,25 @@ function scheduleTimerDisplayFit() {
   timerDisplayFitRafId = window.requestAnimationFrame(() => {
     timerDisplayFitRafId = null;
     fitAllTimerDisplaysToSlots();
+  });
+}
+
+function setupTimerDisplayResizeObserver() {
+  if (typeof window.ResizeObserver !== "function") {
+    return;
+  }
+
+  if (timerDisplayResizeObserver) {
+    timerDisplayResizeObserver.disconnect();
+  }
+
+  timerDisplayResizeObserver = new window.ResizeObserver(() => {
+    scheduleTimerDisplayFit();
+  });
+
+  const displays = document.querySelectorAll(".timer-display");
+  displays.forEach((displayElement) => {
+    timerDisplayResizeObserver.observe(displayElement);
   });
 }
 
@@ -624,7 +642,10 @@ function initRenderer() {
   setupLayoutToggle();
   new Timer(1);
   new Timer(2);
+  setupTimerDisplayResizeObserver();
   scheduleTimerDisplayFit();
+  window.setTimeout(scheduleTimerDisplayFit, 120);
+  window.setTimeout(scheduleTimerDisplayFit, 500);
   window.addEventListener("resize", scheduleTimerDisplayFit);
   if (document.fonts && typeof document.fonts.ready?.then === "function") {
     document.fonts.ready.then(() => {
