@@ -1,6 +1,6 @@
 # Broadcast Timer (Electron)
 
-Dual broadcast counters with UP/DN modes, large on-screen display, and a system clock footer that supports local or manual time.
+Dual broadcast counters with UP/DN modes, large on-screen display, and a system clock footer that supports local/manual time or NTP sync.
 
 ## Features
 
@@ -10,7 +10,9 @@ Dual broadcast counters with UP/DN modes, large on-screen display, and a system 
 - Keyboard-friendly time input (`HH:MM:SS`, numeric only, auto-advance, Enter triggers `SET`)
 - Progress bar per timer
 - Footer system clock (local machine time by default)
-- Manual system clock offset via `SET`
+- Manual system clock offset via `SET` (when NTP is not configured)
+- Optional NTP server sync from a popup modal (`⚙`) with periodic re-sync
+- `⚙` indicator when NTP mode is active
 - Layout toggle: single timer / two timers
 - Electron packaging for macOS, Windows, and Linux
 - Icon generation pipeline from `.ico` source
@@ -89,10 +91,12 @@ out/make
 4. Press `START` (button changes to `PAUSE` while running)
 5. Press `RESET` to return to the configured value in the input fields
 
-## System Clock
+## System Clock Sync
 
-1. The footer clock follows the local machine clock by default.
-2. Enter a manual time in the footer inputs and press `SET` to apply an offset.
+1. Click `⚙` in the footer to open the NTP popup.
+2. Select an NTP host from the dropdown (or pick `Custom...`), then click `שמור`.
+3. Use `סנכרן` for an immediate sync check.
+4. To return to local/manual mode, clear the NTP field and click `שמור`.
 
 ## Main Files
 

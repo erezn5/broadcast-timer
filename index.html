@@ -88,6 +88,17 @@
             <button type="button" class="layout-option" data-layout="single" aria-pressed="false">שעון 1</button>
             <button type="button" class="layout-option" data-layout="double" aria-pressed="true">2 שעונים</button>
           </div>
+          <button
+            id="clockSettingsToggleBtn"
+            class="clock-settings-toggle-btn"
+            type="button"
+            aria-label="הגדרות סנכרון שעון"
+            aria-controls="clockSettingsPanel"
+            aria-expanded="false"
+            title="הגדרות סנכרון שעון"
+          >
+            <span aria-hidden="true">⚙</span>
+          </button>
         </div>
         <div class="system-clock-controls">
           <div class="system-clock-inputs">
@@ -101,6 +112,44 @@
         </div>
       </div>
     </footer>
+  </div>
+
+  <div id="clockSettingsPanel" class="clock-settings-modal" hidden>
+    <div class="clock-settings-dialog" role="dialog" aria-modal="true" aria-labelledby="clockSettingsTitle">
+      <div class="clock-settings-header">
+        <h2 id="clockSettingsTitle" class="clock-settings-title">סנכרון שעון NTP</h2>
+        <button id="clockSettingsCloseBtn" class="clock-settings-close-btn" type="button" aria-label="סגירת חלון הגדרות">✕</button>
+      </div>
+      <label class="clock-settings-label" for="ntpServerSelect">שרת NTP</label>
+      <div class="clock-settings-form">
+        <select id="ntpServerSelect" aria-label="NTP server" dir="ltr">
+          <option value="">ללא NTP (שעון מחשב)</option>
+          <option value="0.il.pool.ntp.org">0.il.pool.ntp.org</option>
+          <option value="1.il.pool.ntp.org">1.il.pool.ntp.org</option>
+          <option value="2.il.pool.ntp.org">2.il.pool.ntp.org</option>
+          <option value="3.il.pool.ntp.org">3.il.pool.ntp.org</option>
+          <option value="il.pool.ntp.org">il.pool.ntp.org</option>
+          <option value="pool.ntp.org">pool.ntp.org</option>
+          <option value="time.google.com">time.google.com</option>
+          <option value="time.cloudflare.com">time.cloudflare.com</option>
+          <option value="time.windows.com">time.windows.com</option>
+          <option value="time.apple.com">time.apple.com</option>
+          <option value="__custom__">Custom...</option>
+        </select>
+        <button id="ntpServerSaveBtn" type="button">שמור</button>
+        <button id="ntpSyncNowBtn" type="button">סנכרן</button>
+      </div>
+      <input
+        class="clock-settings-custom-input"
+        id="ntpServerCustomInput"
+        type="text"
+        placeholder="Enter custom NTP host"
+        aria-label="Custom NTP server address"
+        dir="ltr"
+        hidden
+      />
+      <div id="ntpStatus" class="clock-settings-status" role="status" aria-live="polite"></div>
+    </div>
   </div>
 
   <script src="script.js"></script>
