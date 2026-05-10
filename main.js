@@ -1,151 +1,19 @@
 const { app, BrowserWindow, screen, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('node:fs/promises');
-const dgram = require('node:dgram');
+const { TimeService } = require('./time-service');
 
 const CLOCK_SETTINGS_FILE = 'clock-settings.json';
 const DEFAULT_CLOCK_SETTINGS = Object.freeze({
-  ntpServer: ''
+  ntpServer: 'pool.ntp.org',
+  autoSyncOnStartup: false
 });
 
 function sanitizeClockSettings(rawSettings) {
   const settings = rawSettings && typeof rawSettings === 'object' ? rawSettings : {};
-  const ntpServer = typeof settings.ntpServer === 'string'
-    ? settings.ntpServer.trim()
-    : '';
-
-  return { ntpServer };
-}
-
-function parsePort(rawPort) {
-  const parsed = Number.parseInt(rawPort, 10);
-  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
-    throw new Error('NTP port must be between 1 and 65535.');
-  }
-  return parsed;
-}
-
-function parseNtpTarget(rawTarget) {
-  const target = String(rawTarget || '').trim();
-  if (!target) {
-    throw new Error('NTP server address is required.');
-  }
-
-  if (/\s/.test(target)) {
-    throw new Error('NTP server address must not contain spaces.');
-  }
-
-  let host = target;
-  let port = 123;
-
-  if (target.includes('://')) {
-    let parsedUrl;
-    try {
-      parsedUrl = new URL(target);
-    } catch (_error) {
-      throw new Error('Invalid NTP server URL.');
-    }
-
-    if (!parsedUrl.hostname) {
-      throw new Error('NTP server host is missing.');
-    }
-
-    host = parsedUrl.hostname;
-    if (parsedUrl.port) {
-      port = parsePort(parsedUrl.port);
-    }
-  } else if (target.startsWith('[')) {
-    const bracketEnd = target.indexOf(']');
-    if (bracketEnd === -1) {
-      throw new Error('Invalid IPv6 NTP server format.');
-    }
-
-    host = target.slice(1, bracketEnd).trim();
-    const remainder = target.slice(bracketEnd + 1);
-    if (remainder.length > 0) {
-      if (!remainder.startsWith(':')) {
-        throw new Error('Invalid NTP server format.');
-      }
-      port = parsePort(remainder.slice(1));
-    }
-  } else {
-    const pieces = target.split(':');
-    if (pieces.length === 2 && /^\d{1,5}$/.test(pieces[1])) {
-      host = pieces[0];
-      port = parsePort(pieces[1]);
-    }
-  }
-
-  if (!host) {
-    throw new Error('NTP server host is missing.');
-  }
-
-  return { host, port };
-}
-
-function readNtpTimestampMs(buffer, startOffset) {
-  const seconds = buffer.readUInt32BE(startOffset);
-  const fractions = buffer.readUInt32BE(startOffset + 4);
-  const ntpEpochSeconds = seconds - 2208988800;
-  return (ntpEpochSeconds * 1000) + Math.round((fractions * 1000) / 0x100000000);
-}
-
-function queryNtpServer({ host, port }, timeoutMs = 2500) {
-  return new Promise((resolve, reject) => {
-    const packet = Buffer.alloc(48);
-    packet[0] = 0x1B;
-
-    const socketType = host.includes(':') ? 'udp6' : 'udp4';
-    const socket = dgram.createSocket(socketType);
-    const sentAtMs = Date.now();
-
-    let finished = false;
-
-    const finish = (callback, payload) => {
-      if (finished) {
-        return;
-      }
-      finished = true;
-      clearTimeout(timeoutId);
-      socket.removeAllListeners();
-      socket.close();
-      callback(payload);
-    };
-
-    const timeoutId = setTimeout(() => {
-      finish((error) => reject(error), new Error('NTP request timed out.'));
-    }, timeoutMs);
-
-    socket.on('error', (error) => {
-      finish((err) => reject(err), error);
-    });
-
-    socket.on('message', (message) => {
-      if (!Buffer.isBuffer(message) || message.length < 48) {
-        finish((error) => reject(error), new Error('Invalid NTP response payload.'));
-        return;
-      }
-
-      const receivedAtMs = Date.now();
-      const serverTimeMs = readNtpTimestampMs(message, 40);
-      const roundTripMs = Math.max(0, receivedAtMs - sentAtMs);
-      const offsetMs = (serverTimeMs + (roundTripMs / 2)) - receivedAtMs;
-
-      finish((result) => resolve(result), {
-        host,
-        port,
-        offsetMs,
-        roundTripMs,
-        serverTimeMs
-      });
-    });
-
-    socket.send(packet, 0, packet.length, port, host, (error) => {
-      if (error) {
-        finish((err) => reject(err), error);
-      }
-    });
-  });
+  const ntpServer = typeof settings.ntpServer === 'string' ? settings.ntpServer.trim() : '';
+  const autoSyncOnStartup = settings.autoSyncOnStartup === true;
+  return { ntpServer, autoSyncOnStartup };
 }
 
 async function getClockSettingsPath() {
@@ -167,29 +35,71 @@ async function loadClockSettings() {
 }
 
 async function saveClockSettings(rawSettings) {
-  const nextSettings = sanitizeClockSettings(rawSettings);
-  const settingsPath = await getClockSettingsPath();
+  let currentSettings = { ...DEFAULT_CLOCK_SETTINGS };
+  try {
+    currentSettings = await loadClockSettings();
+  } catch (_error) {
+    currentSettings = { ...DEFAULT_CLOCK_SETTINGS };
+  }
 
+  const mergedSettings = {
+    ...currentSettings,
+    ...(rawSettings && typeof rawSettings === 'object' ? rawSettings : {})
+  };
+  const nextSettings = sanitizeClockSettings(mergedSettings);
+  const settingsPath = await getClockSettingsPath();
   await fs.mkdir(path.dirname(settingsPath), { recursive: true });
   await fs.writeFile(settingsPath, `${JSON.stringify(nextSettings, null, 2)}\n`, 'utf8');
   return nextSettings;
 }
 
-function registerClockIpcHandlers() {
-  ipcMain.handle('clock:load-settings', async () => {
+const timeService = new TimeService({
+  defaultServer: DEFAULT_CLOCK_SETTINGS.ntpServer,
+  timeoutMs: 3000
+});
+
+function registerTimeIpcHandlers() {
+  ipcMain.handle('time:sync-ntp', async (_event, payload) => {
+    const server = payload && typeof payload === 'object' ? payload.server : payload;
+    return timeService.syncWithNtp(server);
+  });
+
+  ipcMain.handle('time:get-current-app-time', async () => {
+    return timeService.getCurrentAppTime();
+  });
+
+  ipcMain.handle('time:use-local-time', async () => {
+    return timeService.useLocalTime();
+  });
+
+  ipcMain.handle('time:get-mode', async () => {
+    return timeService.getMode();
+  });
+
+  ipcMain.handle('time:get-status', async () => {
+    return timeService.getStatus();
+  });
+
+  ipcMain.handle('time:get-settings', async () => {
     return loadClockSettings();
   });
 
-  ipcMain.handle('clock:save-settings', async (_event, payload) => {
-    return saveClockSettings(payload);
+  ipcMain.handle('time:save-settings', async (_event, payload) => {
+    const saved = await saveClockSettings(payload);
+    timeService.configure(saved);
+    return saved;
   });
 
+  // Backward compatibility with existing renderer code paths.
+  ipcMain.handle('clock:load-settings', async () => loadClockSettings());
+  ipcMain.handle('clock:save-settings', async (_event, payload) => {
+    const saved = await saveClockSettings(payload);
+    timeService.configure(saved);
+    return saved;
+  });
   ipcMain.handle('clock:query-ntp', async (_event, payload) => {
-    const server = payload && typeof payload === 'object'
-      ? payload.server
-      : payload;
-    const target = parseNtpTarget(server);
-    return queryNtpServer(target);
+    const server = payload && typeof payload === 'object' ? payload.server : payload;
+    return timeService.syncWithNtp(server);
   });
 }
 
@@ -212,8 +122,23 @@ function createWindow() {
   win.loadFile('index.html');
 }
 
-app.whenReady().then(() => {
-  registerClockIpcHandlers();
+app.whenReady().then(async () => {
+  try {
+    const settings = await loadClockSettings();
+    timeService.configure(settings);
+
+    if (settings.autoSyncOnStartup === true) {
+      await timeService.syncWithNtp(settings.ntpServer);
+    } else {
+      timeService.useLocalTime();
+    }
+  } catch (error) {
+    const reason = error && error.message ? error.message : 'Unknown settings error';
+    console.error(`[TimeService] failed to initialize from settings: ${reason}`);
+    timeService.useLocalTime();
+  }
+
+  registerTimeIpcHandlers();
   createWindow();
 
   app.on('activate', () => {

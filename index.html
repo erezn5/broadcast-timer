@@ -110,6 +110,24 @@
           </div>
           <button id="systemClockSetBtn" class="system-clock-set-btn" type="button">SET</button>
         </div>
+        <div class="app-time-panel" aria-label="App time controls">
+          <div class="app-time-row">
+            <span class="app-time-label">App Time</span>
+            <span class="app-time-value" id="appTimeClockMini">00:00:00</span>
+          </div>
+          <div class="app-time-row">
+            <span class="app-time-label">Mode</span>
+            <span class="app-time-value" id="appTimeModeValue">Local</span>
+          </div>
+          <div class="app-time-row">
+            <span class="app-time-label">Offset</span>
+            <span class="app-time-value" id="appTimeOffsetValue">0 ms</span>
+          </div>
+          <div class="app-time-actions">
+            <button id="appTimeSyncBtn" type="button">Sync with NTP</button>
+            <button id="appTimeUseLocalBtn" type="button">Use Local Time</button>
+          </div>
+        </div>
       </div>
     </footer>
   </div>

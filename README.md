@@ -1,6 +1,6 @@
 # Broadcast Timer (Electron)
 
-Dual broadcast counters with UP/DN modes, large on-screen display, and a system clock footer that supports local/manual time or NTP sync.
+Dual broadcast counters with UP/DN modes, large on-screen display, and a system clock footer that supports local/manual time with optional NTP sync.
 
 ## Features
 
@@ -9,9 +9,11 @@ Dual broadcast counters with UP/DN modes, large on-screen display, and a system 
 - `SET`, `START/PAUSE`, `RESET`
 - Keyboard-friendly time input (`HH:MM:SS`, numeric only, auto-advance, Enter triggers `SET`)
 - Progress bar per timer
-- Footer system clock (local machine time by default)
-- Manual system clock offset via `SET` (when NTP is not configured)
-- Optional NTP server sync from a popup modal (`⚙`) with periodic re-sync
+- Footer system clock (local mode by default)
+- Manual system clock offset via `SET` (available in Local mode)
+- Optional NTP server sync from a popup modal (`⚙`) using manual sync
+- App time panel with current mode and offset
+- Quick actions: `Sync with NTP` and `Use Local Time`
 - `⚙` indicator when NTP mode is active
 - Layout toggle: single timer / two timers
 - Electron packaging for macOS, Windows, and Linux
@@ -93,10 +95,10 @@ out/make
 
 ## System Clock Sync
 
-1. Click `⚙` in the footer to open the NTP popup.
-2. Select an NTP host from the dropdown (or pick `Custom...`), then click `שמור`.
-3. Use `סנכרן` for an immediate sync check.
-4. To return to local/manual mode, clear the NTP field and click `שמור`.
+1. Click `⚙` in the footer and choose an NTP server, then click `שמור`.
+2. Use `סנכרן` (or `Sync with NTP` in the app-time panel) to manually sync.
+3. NTP sync does not run automatically on startup unless `autoSyncOnStartup` is enabled in settings.
+4. Use `Use Local Time` to switch back to local system time immediately.
 
 ## Main Files
 

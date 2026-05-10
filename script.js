@@ -11,26 +11,36 @@ function formatTime(totalSeconds) {
 }
 
 const clockBridge = window.clockBridge || null;
-const NTP_SYNC_INTERVAL_MS = 60_000;
 const NTP_CUSTOM_OPTION_VALUE = "__custom__";
+const DEFAULT_NTP_SERVER = "pool.ntp.org";
 
 let systemClockOffsetMs = 0;
 let ntpServerAddress = "";
 let ntpOffsetMs = null;
-let ntpSyncIntervalId = null;
 let ntpSyncInFlight = false;
+let ntpMode = "local";
 let ntpStatusElement = null;
 let systemClockControlRefs = null;
 let clockSettingsToggleButton = null;
 let clockSettingsPanelElement = null;
 let clockSettingsAutoCloseTimerId = null;
 let setClockSettingsPanelOpen = null;
+let appTimePanelRefs = null;
 let timerDisplayFitRafId = null;
 let timerDisplayMeasurer = null;
 let timerDisplayResizeObserver = null;
 
 function isNtpConfigured() {
   return ntpServerAddress.length > 0;
+}
+
+function isNtpModeActive() {
+  return ntpMode === "ntp";
+}
+
+function formatOffsetMs(offsetMs) {
+  const rounded = Math.round(Number.isFinite(offsetMs) ? offsetMs : 0);
+  return `${rounded} ms`;
 }
 
 function scheduleClockSettingsAutoClose(delayMs = 1400) {
@@ -53,7 +63,7 @@ function syncClockSettingsIndicator() {
     return;
   }
 
-  const active = isNtpConfigured();
+  const active = isNtpModeActive();
   clockSettingsToggleButton.classList.toggle("ntp-active", active);
   clockSettingsToggleButton.setAttribute(
     "aria-label",
@@ -158,7 +168,8 @@ function scheduleTimerDisplayFit() {
 }
 
 function getEffectiveClockDate() {
-  const offsetMs = ntpOffsetMs !== null ? ntpOffsetMs : systemClockOffsetMs;
+  const serviceOffsetMs = isNtpModeActive() && ntpOffsetMs !== null ? ntpOffsetMs : 0;
+  const offsetMs = serviceOffsetMs + systemClockOffsetMs;
   return new Date(Date.now() + offsetMs);
 }
 
@@ -177,12 +188,54 @@ function setNtpStatus(message, tone = "info") {
   }
 }
 
+function updateAppTimePanel() {
+  if (!appTimePanelRefs) {
+    return;
+  }
+
+  const now = getEffectiveClockDate();
+  appTimePanelRefs.clockValue.textContent = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  appTimePanelRefs.modeValue.textContent = isNtpModeActive() ? "NTP" : "Local";
+  appTimePanelRefs.offsetValue.textContent = formatOffsetMs(isNtpModeActive() ? ntpOffsetMs : 0);
+}
+
+function applyTimeServiceStatus(status) {
+  if (!status || typeof status !== "object") {
+    return;
+  }
+
+  ntpMode = status.mode === "ntp" ? "ntp" : "local";
+  ntpOffsetMs = Number.isFinite(status.offsetMs) ? status.offsetMs : null;
+
+  syncClockSettingsIndicator();
+}
+
+async function refreshTimeServiceStatus() {
+  if (!clockBridge || typeof clockBridge.getNtpStatus !== "function") {
+    ntpMode = "local";
+    ntpOffsetMs = null;
+    return null;
+  }
+
+  try {
+    const status = await clockBridge.getNtpStatus();
+    applyTimeServiceStatus(status);
+    return status;
+  } catch (error) {
+    const reason = error && error.message ? error.message : "Time status unavailable";
+    ntpMode = "local";
+    ntpOffsetMs = null;
+    setNtpStatus(`סטטוס זמן לא זמין (${reason}).`, "error");
+    return null;
+  }
+}
+
 function updateManualClockControlsState() {
   if (!systemClockControlRefs) {
     return;
   }
 
-  const disableManualControls = isNtpConfigured();
+  const disableManualControls = isNtpModeActive();
 
   systemClockControlRefs.fields.forEach((field) => {
     field.disabled = disableManualControls;
@@ -195,23 +248,17 @@ function updateManualClockControlsState() {
   }
 }
 
-function stopNtpSyncLoop() {
-  if (ntpSyncIntervalId !== null) {
-    clearInterval(ntpSyncIntervalId);
-    ntpSyncIntervalId = null;
-  }
-  ntpSyncInFlight = false;
-  ntpOffsetMs = null;
-}
-
 async function syncNtpOnce(triggeredManually = false) {
-  if (!isNtpConfigured()) {
+  if (!isNtpConfigured() && !triggeredManually) {
     return;
   }
 
-  if (!clockBridge || typeof clockBridge.queryNtpTime !== "function") {
+  if (!clockBridge || typeof clockBridge.syncNtpTime !== "function") {
     ntpOffsetMs = null;
+    ntpMode = "local";
     setNtpStatus("NTP לא זמין בבילד הזה. שימוש בשעון מחשב/ידני.", "error");
+    updateManualClockControlsState();
+    updateAppTimePanel();
     return;
   }
 
@@ -220,33 +267,28 @@ async function syncNtpOnce(triggeredManually = false) {
   }
 
   ntpSyncInFlight = true;
-  const requestedServer = ntpServerAddress;
+  const requestedServer = ntpServerAddress || DEFAULT_NTP_SERVER;
 
   if (triggeredManually) {
     setNtpStatus(`מסנכרן מול ${requestedServer}...`);
   }
 
   try {
-    const result = await clockBridge.queryNtpTime(requestedServer);
+    const result = await clockBridge.syncNtpTime(requestedServer);
 
-    if (requestedServer !== ntpServerAddress || !isNtpConfigured()) {
-      return;
+    if (!result || result.ok !== true) {
+      const reason = result && result.error ? result.error : "NTP sync failed";
+      throw new Error(reason);
     }
 
-    const nextOffsetMs = Number.isFinite(result && result.offsetMs)
-      ? result.offsetMs
-      : null;
-
-    ntpOffsetMs = nextOffsetMs;
-
-    if (nextOffsetMs === null) {
-      throw new Error("Invalid NTP response.");
-    }
-
+    ntpMode = "ntp";
+    ntpOffsetMs = Number.isFinite(result.offsetMs) ? result.offsetMs : 0;
     updateSystemClock();
     updateSystemClockInputs();
+    updateManualClockControlsState();
+    updateAppTimePanel();
 
-    const hostLabel = result && result.host ? result.host : requestedServer;
+    const hostLabel = result && result.server ? result.server : requestedServer;
     const roundTripSuffix = Number.isFinite(result && result.roundTripMs)
       ? ` | RTT ${Math.round(result.roundTripMs)}ms`
       : "";
@@ -256,37 +298,18 @@ async function syncNtpOnce(triggeredManually = false) {
       scheduleClockSettingsAutoClose();
     }
   } catch (error) {
-    if (requestedServer !== ntpServerAddress || !isNtpConfigured()) {
-      return;
-    }
-
+    ntpMode = "local";
     ntpOffsetMs = null;
     updateSystemClock();
     updateSystemClockInputs();
+    updateManualClockControlsState();
+    updateAppTimePanel();
 
     const reason = error && error.message ? error.message : "NTP request failed";
     setNtpStatus(`NTP לא זמין כרגע (${reason}). שימוש בשעון מחשב/ידני.`, "error");
   } finally {
     ntpSyncInFlight = false;
   }
-}
-
-function startNtpSyncLoop() {
-  if (!isNtpConfigured()) {
-    stopNtpSyncLoop();
-    return;
-  }
-
-  if (ntpSyncIntervalId !== null) {
-    clearInterval(ntpSyncIntervalId);
-  }
-
-  ntpOffsetMs = null;
-  void syncNtpOnce(false);
-
-  ntpSyncIntervalId = setInterval(() => {
-    void syncNtpOnce(false);
-  }, NTP_SYNC_INTERVAL_MS);
 }
 
 async function setupClockSettings() {
@@ -372,11 +395,6 @@ async function setupClockSettings() {
     const isOpen = toggleButton.getAttribute("aria-expanded") === "true";
     const willOpen = !isOpen;
     setClockSettingsPanelOpen(willOpen);
-
-    if (willOpen && isNtpConfigured()) {
-      setNtpStatus(`מסנכרן מול ${ntpServerAddress}...`);
-      void syncNtpOnce(true);
-    }
   });
 
   closeButton.addEventListener("click", () => {
@@ -429,26 +447,34 @@ async function setupClockSettings() {
     }
 
     try {
-      const savedSettings = clockBridge && typeof clockBridge.saveClockSettings === "function"
-        ? await clockBridge.saveClockSettings({ ntpServer: nextServer })
+      const savedSettings = clockBridge && typeof clockBridge.saveTimeSettings === "function"
+        ? await clockBridge.saveTimeSettings({ ntpServer: nextServer })
         : { ntpServer: nextServer };
 
       ntpServerAddress = normalizeNtpServer(savedSettings && savedSettings.ntpServer);
       syncClockSettingsIndicator();
       applyServerToControls(ntpServerAddress);
-      updateManualClockControlsState();
+
+      if (isNtpModeActive() && clockBridge && typeof clockBridge.useLocalTime === "function") {
+        await clockBridge.useLocalTime();
+        await refreshTimeServiceStatus();
+      }
 
       if (isNtpConfigured()) {
-        setNtpStatus(`שרת NTP נשמר (${ntpServerAddress}).`);
-        startNtpSyncLoop();
-        void syncNtpOnce(true);
+        setNtpStatus(`שרת NTP נשמר (${ntpServerAddress}). לחץ "סנכרן" כדי לעבור למצב NTP.`);
       } else {
-        stopNtpSyncLoop();
-        setNtpStatus("לא הוגדר שרת NTP. השעון מסונכרן לשעון המחשב.");
-        updateSystemClock();
-        updateSystemClockInputs();
+        if (clockBridge && typeof clockBridge.useLocalTime === "function") {
+          await clockBridge.useLocalTime();
+        }
+        await refreshTimeServiceStatus();
+        setNtpStatus("לא הוגדר שרת NTP. מצב זמן מקומי פעיל.");
         setClockSettingsPanelOpen(false);
       }
+
+      updateManualClockControlsState();
+      updateSystemClock();
+      updateSystemClockInputs();
+      updateAppTimePanel();
     } catch (error) {
       const reason = error && error.message ? error.message : "Save failed";
       setNtpStatus(`שמירת שרת NTP נכשלה (${reason}).`, "error");
@@ -466,9 +492,9 @@ async function setupClockSettings() {
 
   let initialSettings = { ntpServer: "" };
 
-  if (clockBridge && typeof clockBridge.loadClockSettings === "function") {
+  if (clockBridge && typeof clockBridge.getTimeSettings === "function") {
     try {
-      initialSettings = await clockBridge.loadClockSettings();
+      initialSettings = await clockBridge.getTimeSettings();
     } catch (error) {
       const reason = error && error.message ? error.message : "Load failed";
       setNtpStatus(`טעינת הגדרות NTP נכשלה (${reason}).`, "error");
@@ -480,18 +506,69 @@ async function setupClockSettings() {
   ntpServerAddress = normalizeNtpServer(initialSettings && initialSettings.ntpServer);
   syncClockSettingsIndicator();
   applyServerToControls(ntpServerAddress);
+  await refreshTimeServiceStatus();
   updateManualClockControlsState();
+  updateAppTimePanel();
 
-  if (isNtpConfigured()) {
-    setNtpStatus(`שרת פעיל: ${ntpServerAddress}.`);
-    startNtpSyncLoop();
+  if (isNtpModeActive()) {
+    setNtpStatus(`מצב NTP פעיל (offset: ${formatOffsetMs(ntpOffsetMs)}).`, "ok");
+  } else if (isNtpConfigured()) {
+    setNtpStatus(`שרת מוגדר: ${ntpServerAddress}. לחץ "סנכרן" כדי לעבור ל-NTP.`);
   } else {
-    setNtpStatus("לא הוגדר שרת NTP. השעון מסונכרן לשעון המחשב.");
-    stopNtpSyncLoop();
-    updateSystemClock();
+    setNtpStatus("מצב זמן מקומי פעיל.");
   }
 
   setClockSettingsPanelOpen(false);
+}
+
+function setupAppTimePanel() {
+  const clockValue = document.getElementById("appTimeClockMini");
+  const modeValue = document.getElementById("appTimeModeValue");
+  const offsetValue = document.getElementById("appTimeOffsetValue");
+  const syncButton = document.getElementById("appTimeSyncBtn");
+  const useLocalButton = document.getElementById("appTimeUseLocalBtn");
+
+  if (!clockValue || !modeValue || !offsetValue || !syncButton || !useLocalButton) {
+    return;
+  }
+
+  appTimePanelRefs = {
+    clockValue,
+    modeValue,
+    offsetValue,
+    syncButton,
+    useLocalButton
+  };
+
+  syncButton.addEventListener("click", () => {
+    triggerButtonClickFeedback(syncButton);
+    if (!isNtpConfigured()) {
+      setNtpStatus("Select and save an NTP server first.", "error");
+      return;
+    }
+    void syncNtpOnce(true);
+  });
+
+  useLocalButton.addEventListener("click", async () => {
+    triggerButtonClickFeedback(useLocalButton);
+    if (!clockBridge || typeof clockBridge.useLocalTime !== "function") {
+      setNtpStatus("מעבר לזמן מקומי לא זמין בבילד הזה.", "error");
+      return;
+    }
+
+    try {
+      await clockBridge.useLocalTime();
+      await refreshTimeServiceStatus();
+      updateManualClockControlsState();
+      updateSystemClock();
+      updateSystemClockInputs();
+      updateAppTimePanel();
+      setNtpStatus("מצב זמן מקומי פעיל.");
+    } catch (error) {
+      const reason = error && error.message ? error.message : "Use local failed";
+      setNtpStatus(`מעבר לזמן מקומי נכשל (${reason}).`, "error");
+    }
+  });
 }
 
 function setupTimerDisplayResizeObserver() {
@@ -632,8 +709,8 @@ function setupSystemClockControls() {
   };
 
   const applyManualClockFromInputs = () => {
-    if (isNtpConfigured()) {
-      setNtpStatus("NTP פעיל. כדי לעבור להזנה ידנית, נקה את כתובת השרת ולחץ שמור.", "error");
+    if (isNtpModeActive()) {
+      setNtpStatus("NTP פעיל. לחץ 'Use Local Time' כדי לעבור להזנה ידנית.", "error");
       return;
     }
 
@@ -990,6 +1067,7 @@ function updateSystemClock() {
   const now = getEffectiveClockDate();
   const time = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
   document.getElementById("systemClock").textContent = time;
+  updateAppTimePanel();
 }
 
 function updateSystemClockInputs() {
@@ -1043,11 +1121,12 @@ function setupLayoutToggle() {
   applyLayout(app.classList.contains("single-layout") ? "single" : "double");
 }
 
-function initRenderer() {
+async function initRenderer() {
   setupTimeFieldBehavior();
   setupSystemClockControls();
   setupLayoutToggle();
-  void setupClockSettings();
+  setupAppTimePanel();
+  await setupClockSettings();
   new Timer(1);
   new Timer(2);
   setupTimerDisplayResizeObserver();
@@ -1062,11 +1141,13 @@ function initRenderer() {
   }
   setInterval(() => {
     updateSystemClock();
-    if (isNtpConfigured()) {
+    if (isNtpModeActive()) {
       updateSystemClockInputs();
     }
   }, 1000);
   updateSystemClock();
 }
 
-window.addEventListener("DOMContentLoaded", initRenderer);
+window.addEventListener("DOMContentLoaded", () => {
+  void initRenderer();
+});
